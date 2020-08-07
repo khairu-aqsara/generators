@@ -8,6 +8,16 @@ class {{class}} extends Model
 {
 
     {{connection}}
+    {{UseHasCompositePrimaryKey}}
+    /**
+     * The database table primary Key.
+     *
+     * @var string
+     */
+
+    protected $primaryKey = {{pkey}};
+    public $incrementing    = false;
+    {{timestamps}}
 
     /**
      * The database table used by the model.

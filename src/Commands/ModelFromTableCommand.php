@@ -35,11 +35,13 @@ class ModelFromTableCommand extends Command
     public $fieldsCast;
     public $fieldsDate;
     public $columns;
+    public $timestamps = false;
 
     public $debug;
     public $options;
 
     public $databaseConnection;
+    public $pkey=[];
 
     /**
      * Create a new command instance.
@@ -101,7 +103,7 @@ class ModelFromTableCommand extends Command
             $stub = $modelStub;
 
             // generate the file name for the model based on the table name
-            $filename = Str::studly($table);
+            $filename = Str::studly(strtolower($table));
 
             if ($this->options['singular']){
                 $filename = Str::singular($filename);
@@ -117,6 +119,7 @@ class ModelFromTableCommand extends Command
                 'guardable' => [],
                 'hidden'    => [],
                 'casts'     => [],
+                'pkey'      => $this->pkey
             ];
 
             // fix these up
@@ -126,9 +129,13 @@ class ModelFromTableCommand extends Command
             $this->columns = collect();
 
             foreach ($columns as $col) {
+                if($col->COLUMN_NAME == $col->PKEY){
+                    array_push($this->pkey, $col->PKEY);
+                }
+
                 $this->columns->push([
-                    'field' => $col->Field,
-                    'type'  => $col->Type,
+                    'field' => $col->COLUMN_NAME,
+                    'type'  => $col->DATA_TYPE,
                 ]);
             }
 
@@ -143,6 +150,8 @@ class ModelFromTableCommand extends Command
 
             // figure out the connection
             $stub = $this->replaceConnection($stub, $this->options['connection']);
+
+            $stub = $this->HasCompositePrimaryKey($stub);
 
             // writing stub out
             $this->doComment('Writing model: '.$fullPath, true);
@@ -168,9 +177,21 @@ class ModelFromTableCommand extends Command
         $this->doComment('Retrieving column information for : '.$tableName);
 
         if (strlen($this->options['connection']) <= 0) {
-            return DB::select(DB::raw("describe `{$tableName}`"));
+            return DB::select(DB::raw("SELECT
+                        A.COLUMN_NAME, A.DATA_TYPE, B. COLUMN_NAME as PKEY, B.CONSTRAINT_NAME
+                    FROM
+                        INFORMATION_SCHEMA.COLUMNS A
+                    LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE B ON A.COLUMN_NAME = B.COLUMN_NAME AND A.TABLE_NAME=B.TABLE_NAME
+                    WHERE
+                        A.TABLE_NAME =  '{$tableName}'"));
         } else {
-            return DB::connection($this->options['connection'])->select(DB::raw("describe `{$tableName}`"));
+            return DB::connection($this->options['connection'])->select(DB::raw("SELECT
+                    A.COLUMN_NAME, A.DATA_TYPE, B. COLUMN_NAME as PKEY, B.CONSTRAINT_NAME
+                FROM
+                    INFORMATION_SCHEMA.COLUMNS A
+                LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE B ON A.COLUMN_NAME = B.COLUMN_NAME AND A.TABLE_NAME=B.TABLE_NAME
+                WHERE
+                    A.TABLE_NAME =  '{$tableName}'"));
         }
     }
 
@@ -184,7 +205,7 @@ class ModelFromTableCommand extends Command
      */
     public function replaceClassName($stub, $tableName)
     {
-        return str_replace('{{class}}', $this->options['singular'] ? Str::singular(Str::studly($tableName)): Str::studly($tableName), $stub);
+        return str_replace('{{class}}', $this->options['singular'] ? Str::singular(Str::studly($tableName)): Str::studly(strtolower($tableName)), $stub);
     }
 
     /**
@@ -225,8 +246,17 @@ class ModelFromTableCommand extends Command
                         case 'tinyint(1)':
                             $this->fieldsCast .= (strlen($this->fieldsCast) > 0 ? ', ' : '')."'$field' => 'boolean'";
                             break;
+                        case 'char':
+                        case 'nchar':
+                        case 'varchar':
+                            if(in_array($field, $this->pkey)){
+                                $this->fieldsCast .= (strlen($this->fieldsCast) > 0 ? ', ' : '')."'$field'=> 'string'";
+                            }
+                            break;
                     }
                 }
+            }else if ($field == 'created_at' || $field == 'updated_at') {
+                $this->timestamps = true;
             } else {
                 if ($field != 'id' && $field != 'created_at' && $field != 'updated_at') {
                     $this->fieldsHidden .= (strlen($this->fieldsHidden) > 0 ? ', ' : '')."'$field'";
@@ -240,7 +270,29 @@ class ModelFromTableCommand extends Command
         $stub = str_replace('{{casts}}', $this->fieldsCast, $stub);
         $stub = str_replace('{{dates}}', $this->fieldsDate, $stub);
         $stub = str_replace('{{modelnamespace}}', $this->options['namespace'], $stub);
+        $stub = str_replace('{{pkey}}', $this->addPrimaryKey($stub), $stub);
+        $stub = str_replace('{{timestamps}}', ($this->timestamps ? '' : 'public $timestamps = false;'), $stub);
+        return $stub;
+    }
 
+    public function addPrimaryKey($stub){
+        // Cek length pkey
+        if(sizeof($this->pkey) > 1){
+            $temp = array_map(function($item){
+                return "'". addcslashes($item, "\0..\037\"\\"). "'";
+            }, $this->pkey);
+            return '['. implode(',', $temp) . ']';
+        }else{
+            return "'".$this->pkey[0]."'";
+        }
+    }
+
+    public function HasCompositePrimaryKey($stub){
+        if(sizeof($this->pkey) > 1){
+            $stub = str_replace('{{UseHasCompositePrimaryKey}}', 'use HasCompositePrimaryKey;', $stub);
+        }else{
+            $stub = str_replace('{{UseHasCompositePrimaryKey}}', '', $stub);
+        }
         return $stub;
     }
 

@@ -1,5 +1,7 @@
 # Laracademy Generators
 
+### Added Minimal Support For SQL Server
+
 [![Latest Stable Version](https://poser.pugx.org/laracademy/generators/v/stable)](https://packagist.org/packages/laracademy/generators) [![Total Downloads](https://poser.pugx.org/laracademy/generators/downloads)](https://packagist.org/packages/laracademy/generators) [![Latest Unstable Version](https://poser.pugx.org/laracademy/generators/v/unstable)](https://packagist.org/packages/laracademy/generators) [![License](https://poser.pugx.org/laracademy/generators/license)](https://packagist.org/packages/laracademy/generators)
 
 **Laracademy Generators** - is a tool set that helps speed up the development process of a Laravel application.
