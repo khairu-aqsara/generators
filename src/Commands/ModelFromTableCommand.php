@@ -270,7 +270,9 @@ class ModelFromTableCommand extends Command
         $stub = str_replace('{{casts}}', $this->fieldsCast, $stub);
         $stub = str_replace('{{dates}}', $this->fieldsDate, $stub);
         $stub = str_replace('{{modelnamespace}}', $this->options['namespace'], $stub);
-        $stub = str_replace('{{pkey}}', $this->addPrimaryKey($stub), $stub);
+        if(sizeof($this->pkey) > 0){
+            $stub = str_replace('{{pkey}}', $this->addPrimaryKey($stub), $stub);
+        }
         $stub = str_replace('{{timestamps}}', ($this->timestamps ? '' : 'public $timestamps = false;'), $stub);
         return $stub;
     }
